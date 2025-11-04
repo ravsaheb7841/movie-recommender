@@ -1,5 +1,35 @@
-# Ignore large data files and environment
-*.pkl
-venv/
+# Python cache and compiled files
 __pycache__/
-.idea/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment folders
+env/
+venv/
+.venv/
+
+# Jupyter / IPython checkpoints
+.ipynb_checkpoints/
+
+# Streamlit cache and logs
+.streamlit/
+logs/
+cache/
+
+# Large model and data files
+*.pkl
+*.h5
+*.pt
+*.npy
+*.npz
+*.csv
+*.zip
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Environment and secrets
+.env
+*.env
