@@ -1,0 +1,5 @@
+# Ignore large data files and environment
+*.pkl
+venv/
+__pycache__/
+.idea/
