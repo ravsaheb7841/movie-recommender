@@ -5,3 +5,4 @@ gdown
 python-dotenv
 nltk
 scikit-learn
+gunicorn
