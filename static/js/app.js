@@ -137,11 +137,26 @@ function populateGenreFilter(recommendations) {
 function movieCardHtml(movie) {
   const imdbUrl = movie.imdb_id ? `https://www.imdb.com/title/${movie.imdb_id}` : null;
   const title = `${movie.title} (${movie.year || "N/A"})`;
-
-  const poster = `<img src="${movie.poster}" alt="Poster of ${movie.title}" loading="lazy" />`;
+  const hasPoster = Boolean(movie.poster && !movie.poster.includes("via.placeholder.com"));
+  const posterContent = hasPoster
+    ? `
+      <img
+        src="${movie.poster}"
+        alt="Poster of ${movie.title}"
+        loading="lazy"
+        onerror="this.parentElement.classList.add('poster-missing')"
+      />
+    `
+    : "";
+  const posterFallback = `
+    <div class="poster-fallback" aria-hidden="true">
+      <i class="fa-solid fa-film"></i>
+      <span>No poster available</span>
+    </div>
+  `;
   const posterBlock = imdbUrl
-    ? `<a class="poster-wrap" href="${imdbUrl}" target="_blank" rel="noopener noreferrer">${poster}</a>`
-    : `<div class="poster-wrap">${poster}</div>`;
+    ? `<a class="poster-wrap${hasPoster ? "" : " poster-missing"}" href="${imdbUrl}" target="_blank" rel="noopener noreferrer">${posterContent}${posterFallback}</a>`
+    : `<div class="poster-wrap${hasPoster ? "" : " poster-missing"}">${posterContent}${posterFallback}</div>`;
 
   return `
     <article class="movie-card">

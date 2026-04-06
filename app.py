@@ -5,6 +5,10 @@ from functools import lru_cache
 import pandas as pd
 import requests
 from flask import Flask, jsonify, render_template, request, send_from_directory
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 APP_NAME = "CineVista Prime"
 MOVIE_DICT_ID = "1c5bKp7Dij-sjd4Y61ywcOnZA3uJMa-v4"
@@ -12,7 +16,12 @@ SIMILARITY_ID = "10wtuqpLK3RKAy19x_GYLuHOIgmk9cyQI"
 MOVIE_DICT_FILE = "movie_dict.pkl"
 SIMILARITY_FILE = "similarity.pkl"
 PLACEHOLDER_POSTER = "https://via.placeholder.com/500x750?text=No+Image"
-OMDB_API_KEY = os.environ.get("OMDB_API_KEY", "9e27209a")
+
+# 🔐 Secure API Key (NO default value)
+OMDB_API_KEY = os.environ.get("OMDB_API_KEY")
+
+if not OMDB_API_KEY:
+    raise ValueError("OMDB_API_KEY not found! Please set it in .env file")
 
 
 def download_if_missing(file_id: str, filename: str) -> None:
@@ -22,7 +31,9 @@ def download_if_missing(file_id: str, filename: str) -> None:
     try:
         import gdown
     except ImportError as exc:
-        raise RuntimeError("Missing dependency 'gdown'. Install it using 'pip install -r requirements.txt'.") from exc
+        raise RuntimeError(
+            "Missing dependency 'gdown'. Install it using 'pip install -r requirements.txt'."
+        ) from exc
 
     url = f"https://drive.google.com/uc?id={file_id}"
     print(f"Downloading {filename} from Google Drive...")

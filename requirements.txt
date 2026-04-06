@@ -2,3 +2,6 @@ flask
 pandas
 requests
 gdown
+python-dotenv
+nltk
+scikit-learn
