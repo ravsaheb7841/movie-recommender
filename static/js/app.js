@@ -1,12 +1,18 @@
-const movieSelect = document.getElementById("movieSelect");
+const movieSearch = document.getElementById("movieSearch");
+const movieOptions = document.getElementById("movieOptions");
 const topNInput = document.getElementById("topN");
 const recommendBtn = document.getElementById("recommendBtn");
 const statusBox = document.getElementById("status");
 const resultsEl = document.getElementById("results");
 const resultCount = document.getElementById("resultCount");
+const resultsSection = document.getElementById("resultsSection");
+const genreFilter = document.getElementById("genreFilter");
+const clearFiltersBtn = document.getElementById("clearFilters");
 const themeToggle = document.getElementById("themeToggle");
 const btnIdle = document.getElementById("btnIdle");
 const btnLoading = document.getElementById("btnLoading");
+let currentRecommendations = [];
+let movieCatalog = [];
 
 function applyTheme(theme) {
   const activeTheme = theme === "light" ? "light" : "dark";
@@ -58,6 +64,76 @@ function updateCount(count) {
   resultCount.textContent = `${count} movie${count === 1 ? "" : "s"}`;
 }
 
+function setResultsVisibility(isVisible) {
+  if (resultsSection) {
+    resultsSection.classList.toggle("hidden", !isVisible);
+  }
+}
+
+function setAutocompleteVisibility(isVisible) {
+  if (movieOptions) {
+    movieOptions.classList.toggle("hidden", !isVisible);
+  }
+  if (movieSearch) {
+    movieSearch.setAttribute("aria-expanded", String(isVisible));
+  }
+}
+
+function hideAutocomplete() {
+  setAutocompleteVisibility(false);
+}
+
+function normalizeGenres(genreText) {
+  if (!genreText || genreText === "N/A") {
+    return [];
+  }
+
+  return genreText
+    .split(",")
+    .map((genre) => genre.trim())
+    .filter(Boolean);
+}
+
+function formatResultCount(visibleCount, totalCount) {
+  if (visibleCount === totalCount) {
+    return `${visibleCount} movie${visibleCount === 1 ? "" : "s"}`;
+  }
+
+  return `${visibleCount} of ${totalCount} movie${totalCount === 1 ? "" : "s"}`;
+}
+
+function renderRecommendations() {
+  const selectedGenre = genreFilter ? genreFilter.value : "all";
+  const visibleRecommendations =
+    selectedGenre === "all"
+      ? currentRecommendations
+      : currentRecommendations.filter((movie) =>
+          normalizeGenres(movie.genre).some((genre) => genre.toLowerCase() === selectedGenre.toLowerCase())
+        );
+
+  resultsEl.innerHTML = visibleRecommendations.map(movieCardHtml).join("");
+  resultCount.textContent = formatResultCount(visibleRecommendations.length, currentRecommendations.length);
+  setResultsVisibility(currentRecommendations.length > 0);
+}
+
+function populateGenreFilter(recommendations) {
+  if (!genreFilter) {
+    return;
+  }
+
+  const genres = new Set();
+  recommendations.forEach((movie) => {
+    normalizeGenres(movie.genre).forEach((genre) => genres.add(genre));
+  });
+
+  const genreOptions = Array.from(genres).sort((first, second) => first.localeCompare(second));
+  genreFilter.innerHTML = [
+    '<option value="all">All genres</option>',
+    ...genreOptions.map((genre) => `<option value="${genre}">${genre}</option>`),
+  ].join("");
+  genreFilter.value = "all";
+}
+
 function movieCardHtml(movie) {
   const imdbUrl = movie.imdb_id ? `https://www.imdb.com/title/${movie.imdb_id}` : null;
   const title = `${movie.title} (${movie.year || "N/A"})`;
@@ -88,11 +164,11 @@ async function loadMovieOptions() {
     }
 
     const data = await response.json();
-    const movies = data.movies || [];
+    movieCatalog = data.movies || [];
 
-    movieSelect.innerHTML = movies
-      .map((movie) => `<option value="${movie}">${movie}</option>`)
-      .join("");
+    if (movieOptions) {
+      movieOptions.innerHTML = "";
+    }
 
     setStatus("");
   } catch (error) {
@@ -100,12 +176,59 @@ async function loadMovieOptions() {
   }
 }
 
+function renderMovieSuggestions(query) {
+  if (!movieOptions) {
+    return;
+  }
+
+  const trimmed = (query || "").trim().toLowerCase();
+  if (!trimmed) {
+    movieOptions.innerHTML = "";
+    hideAutocomplete();
+    return;
+  }
+
+  const matches = movieCatalog
+    .filter((movie) => movie.toLowerCase().includes(trimmed))
+    .slice(0, 8);
+
+  if (!matches.length) {
+    movieOptions.innerHTML = '<div class="autocomplete-empty">No matches found</div>';
+    setAutocompleteVisibility(true);
+    return;
+  }
+
+  movieOptions.innerHTML = matches
+    .map((movie) => `<button type="button" class="autocomplete-item" role="option" data-movie="${movie}">${movie}</button>`)
+    .join("");
+  setAutocompleteVisibility(true);
+}
+
+function selectMovieSuggestion(movie) {
+  if (!movieSearch) {
+    return;
+  }
+
+  movieSearch.value = movie;
+  hideAutocomplete();
+}
+
+function resolveMovieTitle(query) {
+  const trimmed = (query || "").trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  const exactMatch = movieCatalog.find((movie) => movie.toLowerCase() === trimmed.toLowerCase());
+  return exactMatch || "";
+}
+
 async function fetchRecommendations() {
-  const movieTitle = movieSelect.value;
+  const movieTitle = resolveMovieTitle(movieSearch ? movieSearch.value : "");
   const topN = Number(topNInput.value || 15);
 
   if (!movieTitle) {
-    setStatus("Please select a movie first.", "error");
+    setStatus("Please choose a movie from the suggestions.", "error");
     return;
   }
 
@@ -129,13 +252,15 @@ async function fetchRecommendations() {
       throw new Error(data.error || "Recommendation request failed");
     }
 
-    const recs = data.recommendations || [];
-    resultsEl.innerHTML = recs.map(movieCardHtml).join("");
-    updateCount(recs.length);
-    setStatus(`Found ${recs.length} similar movies for ${movieTitle}.`, "success");
+    currentRecommendations = data.recommendations || [];
+    populateGenreFilter(currentRecommendations);
+    renderRecommendations();
+    setStatus(`Found ${currentRecommendations.length} similar movies for ${movieTitle}.`, "success");
   } catch (error) {
+    currentRecommendations = [];
     resultsEl.innerHTML = "";
     updateCount(0);
+    setResultsVisibility(false);
     setStatus(error.message || "Could not fetch recommendations.", "error");
   } finally {
     setLoadingState(false);
@@ -143,8 +268,51 @@ async function fetchRecommendations() {
 }
 
 recommendBtn.addEventListener("click", fetchRecommendations);
+if (movieSearch) {
+  movieSearch.addEventListener("input", (event) => {
+    renderMovieSuggestions(event.target.value);
+  });
+  movieSearch.addEventListener("focus", (event) => {
+    renderMovieSuggestions(event.target.value);
+  });
+  movieSearch.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      hideAutocomplete();
+    }
+  });
+}
+if (movieOptions) {
+  movieOptions.addEventListener("click", (event) => {
+    const option = event.target.closest(".autocomplete-item");
+    if (!option) {
+      return;
+    }
+
+    selectMovieSuggestion(option.dataset.movie || "");
+  });
+}
+if (genreFilter) {
+  genreFilter.addEventListener("change", renderRecommendations);
+}
+if (clearFiltersBtn) {
+  clearFiltersBtn.addEventListener("click", () => {
+    if (genreFilter) {
+      genreFilter.value = "all";
+    }
+    renderRecommendations();
+  });
+}
 if (themeToggle) {
   themeToggle.addEventListener("click", toggleTheme);
 }
+document.addEventListener("click", (event) => {
+  if (!movieSearch || !movieOptions) {
+    return;
+  }
+
+  if (!movieSearch.contains(event.target) && !movieOptions.contains(event.target)) {
+    hideAutocomplete();
+  }
+});
 window.addEventListener("DOMContentLoaded", loadMovieOptions);
 window.addEventListener("DOMContentLoaded", initializeTheme);

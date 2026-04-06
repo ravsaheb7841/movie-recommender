@@ -4,7 +4,7 @@ from functools import lru_cache
 
 import pandas as pd
 import requests
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, send_from_directory
 
 APP_NAME = "CineVista Prime"
 MOVIE_DICT_ID = "1c5bKp7Dij-sjd4Y61ywcOnZA3uJMa-v4"
@@ -102,6 +102,11 @@ def recommend(movie_title: str, top_n: int = 15) -> list[dict]:
 @app.get("/")
 def home():
     return render_template("index.html", app_name=APP_NAME)
+
+
+@app.get("/favicon.ico")
+def favicon():
+    return send_from_directory("static", "favicon.svg", mimetype="image/svg+xml")
 
 
 @app.get("/api/movies")

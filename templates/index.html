@@ -14,6 +14,7 @@
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css"
     />
+    <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
   </head>
   <body data-theme="dark">
@@ -47,9 +48,18 @@
     <main class="container">
       <section class="search-card">
         <div class="search-row">
-          <div class="field-group">
-            <label for="movieSelect"><i class="fa-solid fa-clapperboard"></i> Choose a movie</label>
-            <select id="movieSelect" aria-label="Movie selector"></select>
+          <div class="field-group search-field">
+            <label for="movieSearch"><i class="fa-solid fa-clapperboard"></i> Search a movie</label>
+            <input
+              id="movieSearch"
+              type="search"
+              placeholder="Start typing a movie title..."
+              autocomplete="off"
+              aria-label="Search movie title"
+              aria-autocomplete="list"
+              aria-expanded="false"
+            />
+            <div id="movieOptions" class="autocomplete-panel hidden" role="listbox" aria-label="Movie suggestions"></div>
           </div>
           <div class="field-group small">
             <label for="topN"><i class="fa-solid fa-layer-group"></i> Number of picks</label>
@@ -70,10 +80,19 @@
 
       <section id="status" class="status" aria-live="polite"></section>
 
-      <section>
+      <section id="resultsSection" class="hidden">
         <div class="results-header">
           <h2><i class="fa-solid fa-star"></i> Curated Results</h2>
           <span id="resultCount" class="count-badge">0 movies</span>
+        </div>
+        <div class="results-toolbar">
+          <div class="field-group compact">
+            <label for="genreFilter"><i class="fa-solid fa-tags"></i> Filter by genre</label>
+            <select id="genreFilter" aria-label="Filter recommendations by genre">
+              <option value="all" selected>All genres</option>
+            </select>
+          </div>
+          <button id="clearFilters" class="secondary-btn" type="button">Clear filter</button>
         </div>
         <div id="results" class="results-grid"></div>
       </section>
