@@ -1,13 +1,16 @@
-# Movie Recommender System
+# CineVista Prime
 
-A simple movie recommendation app built with Streamlit and OMDb API.
+CineVista Prime is a professional movie recommendation web application built with Flask, HTML, CSS, and JavaScript.
 
-## How it works
-- Select a movie from the dropdown.
-- The app recommends similar movies using a precomputed similarity matrix.
-- Each recommendation shows poster, IMDb rating, year, and genre.
+## Features
+- Modern responsive interface with Font Awesome professional icons.
+- Movie recommendations powered by a precomputed similarity matrix.
+- Live OMDb enrichment for poster, IMDb rating, year, and genre.
+- IMDb links for each recommended title.
 
 ## Run locally
 ```bash
 pip install -r requirements.txt
-streamlit run app.py
+python app.py
+
+Then open http://127.0.0.1:5000 in your browser.

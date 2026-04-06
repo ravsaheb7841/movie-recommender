@@ -1,126 +1,142 @@
 import os
-import math
 import pickle
-import requests
+from functools import lru_cache
+
 import pandas as pd
-import streamlit as st
-import gdown
+import requests
+from flask import Flask, jsonify, render_template, request
 
-# Page configuration
-st.set_page_config(page_title="Movie Recommender", layout="wide")
-st.markdown("<h1 style='text-align:center;'>Movie Recommender System</h1>", unsafe_allow_html=True)
-st.markdown("---")
-
-# Google Drive File IDs
+APP_NAME = "CineVista Prime"
 MOVIE_DICT_ID = "1c5bKp7Dij-sjd4Y61ywcOnZA3uJMa-v4"
 SIMILARITY_ID = "10wtuqpLK3RKAy19x_GYLuHOIgmk9cyQI"
 MOVIE_DICT_FILE = "movie_dict.pkl"
 SIMILARITY_FILE = "similarity.pkl"
-
-# Download file from Google Drive if not found
-def download_if_missing(file_id: str, filename: str):
-    if not os.path.exists(filename):
-        st.info(f"Downloading {filename} from Google Drive...")
-        url = f"https://drive.google.com/uc?id={file_id}"
-        try:
-            gdown.download(url, filename, quiet=False)
-            st.success(f"{filename} downloaded successfully.")
-        except Exception as e:
-            st.error(f"Failed to download {filename}. Error: {e}")
-            st.stop()
-
-# Download required data files
-download_if_missing(MOVIE_DICT_ID, MOVIE_DICT_FILE)
-download_if_missing(SIMILARITY_ID, SIMILARITY_FILE)
-
-# Load data
-movies_dict = pickle.load(open(MOVIE_DICT_FILE, "rb"))  # Load movie dictionary
-movies = pd.DataFrame(movies_dict)  # Convert to DataFrame
-similarity = pickle.load(open(SIMILARITY_FILE, "rb"))  # Load similarity matrix
-
-# OMDb API key
-OMDB_API_KEY = os.environ.get("OMDB_API_KEY", "9e27209a")  # Use environment variable or fallback
+PLACEHOLDER_POSTER = "https://via.placeholder.com/500x750?text=No+Image"
+OMDB_API_KEY = os.environ.get("OMDB_API_KEY", "9e27209a")
 
 
-@st.cache_data(show_spinner=False)
-def get_movie_details(movie_title: str):  # Fetch movie details
+def download_if_missing(file_id: str, filename: str) -> None:
+    if os.path.exists(filename):
+        return
+
     try:
-        url = "http://www.omdbapi.com/"
-        params = {"t": movie_title, "apikey": OMDB_API_KEY}
-        response = requests.get(url, params=params, timeout=6)
+        import gdown
+    except ImportError as exc:
+        raise RuntimeError("Missing dependency 'gdown'. Install it using 'pip install -r requirements.txt'.") from exc
+
+    url = f"https://drive.google.com/uc?id={file_id}"
+    print(f"Downloading {filename} from Google Drive...")
+    gdown.download(url, filename, quiet=False)
+
+
+def load_assets() -> tuple[pd.DataFrame, object]:
+    download_if_missing(MOVIE_DICT_ID, MOVIE_DICT_FILE)
+    download_if_missing(SIMILARITY_ID, SIMILARITY_FILE)
+
+    with open(MOVIE_DICT_FILE, "rb") as movie_file:
+        movies_dict = pickle.load(movie_file)
+    with open(SIMILARITY_FILE, "rb") as sim_file:
+        similarity_matrix = pickle.load(sim_file)
+
+    return pd.DataFrame(movies_dict), similarity_matrix
+
+
+movies, similarity = load_assets()
+movie_options = sorted(movies["title"].dropna().unique().tolist())
+
+app = Flask(__name__)
+
+
+@lru_cache(maxsize=4096)
+def get_movie_details(movie_title: str) -> dict:
+    try:
+        response = requests.get(
+            "http://www.omdbapi.com/",
+            params={"t": movie_title, "apikey": OMDB_API_KEY},
+            timeout=6,
+        )
         data = response.json()
         if data.get("Response") == "True":
-            imdb_id = data.get("imdbID")
-            poster = data.get("Poster") if data.get("Poster") and data.get("Poster") != "N/A" else "https://via.placeholder.com/500x750?text=No+Image"
+            poster = data.get("Poster")
             return {
-                "imdb_id": imdb_id,
-                "poster": poster,
+                "imdb_id": data.get("imdbID"),
+                "poster": poster if poster and poster != "N/A" else PLACEHOLDER_POSTER,
                 "year": data.get("Year", "N/A"),
                 "rating": data.get("imdbRating", "N/A"),
                 "genre": data.get("Genre", "N/A"),
             }
     except Exception:
         pass
-    return {"imdb_id": None, "poster": "https://via.placeholder.com/500x750?text=No+Image", "year": "N/A", "rating": "N/A", "genre": "N/A"}
+
+    return {
+        "imdb_id": None,
+        "poster": PLACEHOLDER_POSTER,
+        "year": "N/A",
+        "rating": "N/A",
+        "genre": "N/A",
+    }
 
 
-@st.cache_data(show_spinner=False)
-def recommend(movie_title: str, top_n: int = 15):  # Generate recommendations
+def recommend(movie_title: str, top_n: int = 15) -> list[dict]:
     try:
         movie_index = movies[movies["title"] == movie_title].index[0]
     except Exception:
         return []
+
     distances = similarity[movie_index]
-    similar_movies = sorted(list(enumerate(distances)), reverse=True, key=lambda x: x[1])[1 : top_n + 1]
+    similar_movies = sorted(
+        list(enumerate(distances)),
+        reverse=True,
+        key=lambda item: item[1],
+    )[1 : top_n + 1]
+
     recommendations = []
     for idx, _ in similar_movies:
         title = movies.iloc[idx].title
         details = get_movie_details(title)
         recommendations.append({"title": title, **details})
+
     return recommendations
 
 
-# UI
-movie_options = sorted(movies["title"].dropna().unique())
-selected_movie = st.selectbox("Select a movie to get recommendations", movie_options)
+@app.get("/")
+def home():
+    return render_template("index.html", app_name=APP_NAME)
 
-if st.button("Recommend"):
-    with st.spinner("Finding similar movies..."):
-        recs = recommend(selected_movie)
 
-    if not recs:
-        st.warning("No recommendations found. Try another movie.")
-    else:
-        st.success(f"Found {len(recs)} similar movies for '{selected_movie}'")
-        st.markdown("---")
+@app.get("/api/movies")
+def list_movies():
+    return jsonify({"movies": movie_options})
 
-        movies_per_row = 5
-        num_rows = math.ceil(len(recs) / movies_per_row)
 
-        for row in range(num_rows):
-            cols = st.columns(movies_per_row)
-            start = row * movies_per_row
-            end = min(start + movies_per_row, len(recs))
-            for col_idx, col in enumerate(cols):
-                idx = start + col_idx
-                if idx < end:
-                    movie = recs[idx]
-                    imdb_link = f"https://www.imdb.com/title/{movie['imdb_id']}" if movie["imdb_id"] else None
-                    with col:
-                        if imdb_link:
-                            col.markdown(
-                                f"<a href='{imdb_link}' target='_blank'><img src='{movie['poster']}' style='width:100%; border-radius:12px;'></a>",
-                                unsafe_allow_html=True,
-                            )
-                        else:
-                            st.image(movie["poster"], use_container_width=True)
-                        st.markdown(
-                            f"**{movie['title']} ({movie['year']})**<br>"
-                            f"IMDb: {movie['rating']}<br>"
-                            f"Genre: {movie['genre']}",
-                            unsafe_allow_html=True,
-                        )
-                        st.markdown("---")
+@app.post("/api/recommend")
+def api_recommend():
+    payload = request.get_json(silent=True) or {}
+    movie_title = payload.get("movie_title", "").strip()
+    top_n = payload.get("top_n", 15)
 
-# Footer
-st.markdown("<hr><div style='text-align:center; color:gray;'>Developed by Ravsaheb</div>", unsafe_allow_html=True)
+    try:
+        top_n = int(top_n)
+    except (TypeError, ValueError):
+        top_n = 15
+    top_n = max(1, min(top_n, 25))
+
+    if not movie_title:
+        return jsonify({"error": "movie_title is required"}), 400
+
+    if movie_title not in movie_options:
+        return jsonify({"error": "Movie not found in catalog"}), 404
+
+    recommendations = recommend(movie_title, top_n=top_n)
+    return jsonify(
+        {
+            "app_name": APP_NAME,
+            "query": movie_title,
+            "count": len(recommendations),
+            "recommendations": recommendations,
+        }
+    )
+
+
+if __name__ == "__main__":
+    app.run(debug=True)
