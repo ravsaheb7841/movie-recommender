@@ -20,9 +20,6 @@ PLACEHOLDER_POSTER = "https://via.placeholder.com/500x750?text=No+Image"
 # 🔐 Secure API Key (NO default value)
 OMDB_API_KEY = os.environ.get("OMDB_API_KEY")
 
-if not OMDB_API_KEY:
-    raise ValueError("OMDB_API_KEY not found! Please set it in .env file")
-
 
 def download_if_missing(file_id: str, filename: str) -> None:
     if os.path.exists(filename):
@@ -60,6 +57,15 @@ app = Flask(__name__)
 
 @lru_cache(maxsize=4096)
 def get_movie_details(movie_title: str) -> dict:
+    if not OMDB_API_KEY:
+        return {
+            "imdb_id": None,
+            "poster": PLACEHOLDER_POSTER,
+            "year": "N/A",
+            "rating": "N/A",
+            "genre": "N/A",
+        }
+
     try:
         response = requests.get(
             "http://www.omdbapi.com/",
